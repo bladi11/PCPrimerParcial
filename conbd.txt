@@ -1,0 +1,155 @@
+from fastapi import FastAPI, HTTPException
+from sqlalchemy import create_engine, Column, Integer, String
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker
+from pydantic import BaseModel
+
+# Configuración de la conexión a la base de datos MySQL
+SQLALCHEMY_DATABASE_URL = "mysql://root:@localhost/libro"
+engine = create_engine(SQLALCHEMY_DATABASE_URL)
+
+# Declaración de la base de modelos
+Base = declarative_base()
+
+# Definición del modelo de datos para libros
+class Libro(Base):
+    __tablename__ = "libro"
+
+    id = Column(Integer, primary_key=True, index=True)
+    titulo = Column(String, index=True)
+    autor = Column(String, index=True)
+    anio = Column(Integer)
+
+# Crea todas las tablas en la base de datos
+Base.metadata.create_all(bind=engine)
+
+# Crea una sesión de base de datos
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+# Modelo de datos para la entrada de libro
+class LibroCreate(BaseModel):
+    titulo: str
+    autor: str
+    anio: int
+
+# Modelo de datos para la salida de libro
+class LibroResponse(BaseModel):
+    id: int
+    titulo: str
+    autor: str
+    anio: int
+
+app = FastAPI()
+
+# Operaciones CRUD usando SQLAlchemy y la base de datos MySQL
+
+# Ruta para crear un nuevo libro
+@app.post('/libros/', response_model=LibroResponse)
+def create_libro(libro: LibroCreate):
+    db = SessionLocal()
+    db_libro = Libro(**libro.dict())
+    db.add(db_libro)
+    db.commit()
+    db.refresh(db_libro)
+    return db_libro
+
+# Ruta para obtener todos los libros
+@app.get('/libros/', response_model=list[LibroResponse])
+def get_all_libros():
+    db = SessionLocal()
+    return db.query(Libro).all()
+
+# Ruta para obtener un libro por su ID
+@app.get('/libros/{libro_id}', response_model=LibroResponse)
+def get_libro_by_id(libro_id: int):
+    db = SessionLocal()
+    libro = db.query(Libro).filter(Libro.id == libro_id).first()
+    if libro is None:
+        raise HTTPException(status_code=404, detail="Libro no encontrado")
+    return libro
+
+# Ruta para actualizar un libro por su ID
+@app.put('/libros/{libro_id}', response_model=LibroResponse)
+def update_libro(libro_id: int, libro: LibroCreate):
+    db = SessionLocal()
+    db_libro = db.query(Libro).filter(Libro.id == libro_id).first()
+    if db_libro is None:
+        raise HTTPException(status_code=404, detail="Libro no encontrado")
+    for var, value in libro.dict().items():
+        setattr(db_libro, var, value)
+    db.commit()
+    db.refresh(db_libro)
+    return db_libro
+
+# Ruta para eliminar un libro por su ID
+@app.delete('/libros/{libro_id}')
+def delete_libro(libro_id: int):
+    db = SessionLocal()
+    db_libro = db.query(Libro).filter(Libro.id == libro_id).first()
+    if db_libro is None:
+        raise HTTPException(status_code=404, detail="Libro no encontrado")
+    db.delete(db_libro)
+    db.commit()
+    return {"message": "Libro eliminado exitosamente"}
+
+#iniciar el programa (uvicorn main:app --reload)
+
+
+//
+
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+from typing import Dict
+
+app = FastAPI()
+
+# Modelo de datos para representar un libro
+class Book(BaseModel):
+    title: str
+    author: str
+    year: int
+
+# Base de datos ficticia para almacenar los libros
+db: Dict[int, Book] = {}
+
+# Contador para asignar IDs únicos a los libros
+book_id_counter = 0
+
+# Ruta para crear un nuevo libro
+@app.post('/books/')
+def create_book(book: Book):
+    global book_id_counter
+    book_id_counter += 1
+    db[book_id_counter] = book
+    return {"message": "Libro creado exitosamente", "book_id": book_id_counter}
+
+# Ruta para obtener todos los libros
+@app.get('/books/')
+def get_all_books():
+    return db
+
+# Ruta para obtener un libro por su ID
+@app.get('/books/{book_id}')
+def get_book_by_id(book_id: int):
+    if book_id not in db:
+        raise HTTPException(status_code=404, detail="Libro no encontrado")
+    return db[book_id]
+
+# Ruta para actualizar un libro por su ID
+@app.put('/books/{book_id}')
+def update_book(book_id: int, book: Book):
+    if book_id not in db:
+        raise HTTPException(status_code=404, detail="Libro no encontrado")
+    db[book_id] = book
+    return {"message": "Libro actualizado exitosamente"}
+
+# Ruta para eliminar un libro por su ID
+@app.delete('/books/{book_id}')
+def delete_book(book_id: int):
+    if book_id not in db:
+        raise HTTPException(status_code=404, detail="Libro no encontrado")
+    del db[book_id]
+    return {"message": "Libro eliminado exitosamente"}
+
+
+#iniciar el programa (uvicorn main:app --reload)
